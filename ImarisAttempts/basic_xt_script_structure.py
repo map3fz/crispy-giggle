@@ -2,7 +2,7 @@
 #   <Menu>
 #    <Submenu name="Mikey">
 #     <Item name="Python Attempt 1" icon="Python" tooltip="Creates surfaces, masked channels, and surfaces with stats">
-#      <Command>PythonXT::create_surface_channels_then_analyze(%i)</Command>
+#      <Command>PythonXT::create_surfaces_channels_then_analyze(%i)</Command>
 #     </Item>
 #    </Submenu>
 #   </Menu>
@@ -17,7 +17,7 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
     """
     This is a function built with the intention of being able to be manipulated to easily set
     repeated, changed, and customized for individual needs based on threshold values expected for
-    different IHC experiements. Along with this, there is a section setup that will allow you to
+    different IHC experiments. Along with this, there is a section setup that will allow you to
     create a channel that is masked onto a surface with an example set for masking onto your primary
     surface, or for your secondary surface. Along with this, names can be changed to allow it to
     automatically apply the same name for each iteration of the surfaces and channels that makes
@@ -41,10 +41,10 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
         return
 
     # Get image properties
-    vSizeX = vImaris.GetSizeX()
-    vSizeY = vImaris.GetSizeY()
-    vSizeZ = vImaris.GetSizeZ()
-    vSizeC = vImaris.GetSizeC()
+    vSizeX = vDataSet.GetSizeX()
+    vSizeY = vDataSet.GetSizeY()
+    vSizeZ = vDataSet.GetSizeZ()
+    vSizeC = vDataSet.GetSizeC()
 
     print(f"Dataset dimensions: X={vSizeX} Y={vSizeY} Z={vSizeZ} Channels={vSizeC}")
 
@@ -66,7 +66,7 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
     vPrimaryThreshold.SetDefaultValue(30)
 
     # Create dialog for secondary surface
-    vSecondaryThreshold = vUI.CreateNumberRange('Secondary surgace channel: ', channel_names, 1)
+    vSecondarySurfaceChannel = vUI.CreateNumberRange('Secondary surface channel: ', channel_names, 1)
 
     # Create threshold setting for secondary surface
     vSecondaryThreshold = vUI.CreateNumberRange('Secondary threshold: ', 0, 255, 1)
@@ -93,7 +93,7 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
     secondary_channel_idx = vSecondaryThreshold.GetValue()
     secondary_threshold = vSecondaryThreshold.GetValue()
     detail_level = vSurfaceDetail.GetValue()
-    use_background = vBackgroundSubtraction.GetValue()
+    use_background_subtraction = vBackgroundSubtraction.GetValue()
     export_path = vExportPath.GetValue()
 
     # Create primary surface (e.g., amyloid plaques w/ ThioS)
@@ -114,7 +114,7 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
 
     # Set name for the primary surface
     primary_surface_name = f"{channel_names[primary_channel_idx]}_Surface"
-    vSufaces.SetName(primary_surface_name)
+    vSurfaces.SetName(primary_surface_name)
 
     # Add surface to the scene
     vSurpassScene.AddChild(vSurfaces, -1)
@@ -148,109 +148,109 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
         print(f"Masking channel {channel_names[c]} with {primary_surface_name}...")
         vMaskedData = vFactory.CreateMaskedChannel(vDataSet, c, vMaskedChannel, "0", "Inside")
 
+    if vMaskedData is not None:
+        # Add masked channel to dataset
+        masked_name = f"{channel_names[c]}_masked_by_{primary_surface_name}"
+        vImaris.GetDataSet().SetChannelName(vSizeC, masked_name)
+        vImaris.GetDataSet().SetChannelColorRGBA(vSizeC, vDataSet.GetChannelColorRGBA(c))
+
+    # Create masked channels based on secondary surface (e.g., microglia)
+    print("Creating masked channels...")
+
+    # Mask channel inside secondary surface
+    vMaskedChannel = vFactory.CreateMaskChannel(vDataSet, vSecondSurfaces, "Inside", 0, 0)
+
+    # Create masked channels for all channels
+    masked_channel_indices = []  # Store the indices of newly created masked channels
+
+    for c in range(vSizeC):
+        print(f"Masking channel {channel_names[c]} with {secondary_surface_name}...")
+        vMaskedData = vFactory.CreateMaskedChannel(vDataSet, c, vMaskedChannel, "0", "Inside")
+
         if vMaskedData is not None:
             # Add masked channel to dataset
-            masked_name = f"{channel_names[c]}_masked_by_{primary_surface_name}"
-            vImaris.GetDataSet().SetChannelName(vSizeC, masked_name)
-            vImaris.GetDataSet().SetChannelColorRGBA(vSizeC, vDataSet.GetChannelColorRGBA(c))
+            new_channel_index = vSizeC + len(masked_channel_indices)
+            masked_name = f"{channel_names[c]}_masked_by_{secondary_surface_name}"
+            vImaris.GetDataSet().SetChannelName(new_channel_index, masked_name)
+            vImaris.GetDataSet().SetChannelColorRGBA(new_channel_index, vDataSet.GetChannelColorRGBA(c))
+            masked_channel_indices.append(new_channel_index)
 
-        # Create masked channels based on secondary surface (e.g., microglia)
-        print("Creating masked channels...")
+    # Now create new surfaces based on the masked channels
+    print("Creating surfaces from masked channels...")
 
-        # Mask channel inside secondary surface
-        vMaskedChannel = vFactory.CreateMaskChannel(vDataSet, vSecondSurfaces, "Inside", 0, 0)
+    # Create surface from first masked channel (assuming this is the primary stain masked by microglia)
+    if len(masked_channel_indices) >= 1:
+        primary_masked_idx = masked_channel_indices[0]  # First masked channel (likely ThioS in microglia)
 
-        # Create masked channels for all channels
-        masked_channel_indices = []  # Store the indices of newly created masked channels
+        print(f"Creating surface from masked channel {vImaris.GetDataSet().GetChannelName(primary_masked_idx)}...")
+        vMaskedPrimarySurface = vFactory.DetectSurfaces(vDataSet, [], primary_masked_idx,
+                                                        use_background_subtraction, primary_threshold,
+                                                        0.0, True, False, False, detail_level, "")
 
-        for c in range(vSizeC):
-            print(f"Masking channel {channel_names[c]} with {secondary_surface_name}...")
-            vMaskedData = vFactory.CreateMaskedChannel(vDataSet, c, vMaskedChannel, "0", "Inside")
+        if vMaskedPrimarySurface is not None:
+            masked_primary_name = f"{channel_names[primary_channel_idx]}_in_{secondary_surface_name}"
+            vMaskedPrimarySurface.SetName(masked_primary_name)
+            vSurpassScene.AddChild(vMaskedPrimarySurface, -1)
 
-            if vMaskedData is not None:
-                # Add masked channel to dataset
-                new_channel_index = vSizeC + len(masked_channel_indices)
-                masked_name = f"{channel_names[c]}_masked_by_{secondary_surface_name}"
-                vImaris.GetDataSet().SetChannelName(new_channel_index, masked_name)
-                vImaris.GetDataSet().SetChannelColorRGBA(new_channel_index, vDataSet.GetChannelColorRGBA(c))
-                masked_channel_indices.append(new_channel_index)
+    # Create surface from second masked channel (if available)
+    if len(masked_channel_indices) >= 2:
+        secondary_masked_idx = masked_channel_indices[1]  # Second masked channel
 
-        # Now create new surfaces based on the masked channels
-        print("Creating surfaces from masked channels...")
+        print(
+            f"Creating surface from masked channel {vImaris.GetDataSet().GetChannelName(secondary_masked_idx)}...")
+        vMaskedSecondarySurface = vFactory.DetectSurfaces(vDataSet, [], secondary_masked_idx,
+                                                          use_background_subtraction, secondary_threshold,
+                                                          0.0, True, False, False, detail_level, "")
 
-        # Create surface from first masked channel (assuming this is the primary stain masked by microglia)
-        if len(masked_channel_indices) >= 1:
-            primary_masked_idx = masked_channel_indices[0]  # First masked channel (likely ThioS in microglia)
+        if vMaskedSecondarySurface is not None:
+            masked_secondary_name = f"{channel_names[secondary_channel_idx]}_in_{secondary_surface_name}"
+            vMaskedSecondarySurface.SetName(masked_secondary_name)
+            vSurpassScene.AddChild(vMaskedSecondarySurface, -1)
 
-            print(f"Creating surface from masked channel {vImaris.GetDataSet().GetChannelName(primary_masked_idx)}...")
-            vMaskedPrimarySurface = vFactory.DetectSurfaces(vDataSet, [], primary_masked_idx,
-                                                            use_background_subtraction, primary_threshold,
-                                                            0.0, True, False, False, detail_level, "")
+    # Calculate and export statistics
+    print("Calculating statistics...")
 
-            if vMaskedPrimarySurface is not None:
-                masked_primary_name = f"{channel_names[primary_channel_idx]}_in_{secondary_surface_name}"
-                vMaskedPrimarySurface.SetName(masked_primary_name)
-                vSurpassScene.AddChild(vMaskedPrimarySurface, -1)
+    # Get statistics from primary surface
+    vPrimaryStatistics = vSurfaces.GetStatistics()
+    vPrimaryStatNames = vPrimaryStatistics.GetNames()
+    vPrimaryStatValues = vPrimaryStatistics.GetValues()
+    vPrimaryStatIds = vPrimaryStatistics.GetIds()
 
-        # Create surface from second masked channel (if available)
-        if len(masked_channel_indices) >= 2:
-            secondary_masked_idx = masked_channel_indices[1]  # Second masked channel
+    # Get statistics from secondary surface
+    vSecondaryStatistics = vSecondSurfaces.GetStatistics()
+    vSecondaryStatNames = vSecondaryStatistics.GetNames()
+    vSecondaryStatValues = vSecondaryStatistics.GetValues()
+    vSecondaryStatIds = vSecondaryStatistics.GetIds()
 
-            print(
-                f"Creating surface from masked channel {vImaris.GetDataSet().GetChannelName(secondary_masked_idx)}...")
-            vMaskedSecondarySurface = vFactory.DetectSurfaces(vDataSet, [], secondary_masked_idx,
-                                                              use_background_subtraction, secondary_threshold,
-                                                              0.0, True, False, False, detail_level, "")
+    # Create distance transformation to calculate volume overlap
+    print("Calculating distance statistics and overlaps...")
+    vDistStat = vFactory.DistanceTransformForSurfaces(vSecondSurfaces, vSurfaces)
 
-            if vMaskedSecondarySurface is not None:
-                masked_secondary_name = f"{channel_names[secondary_channel_idx]}_in_{secondary_surface_name}"
-                vMaskedSecondarySurface.SetName(masked_secondary_name)
-                vSurpassScene.AddChild(vMaskedSecondarySurface, -1)
+    # Prepare data for export
+    primary_stats_data = {}
 
-        # Calculate and export statistics
-        print("Calculating statistics...")
+    # Extract total surface volume and sphericity for the primary surface (ThioS)
+    for i in range(len(vPrimaryStatNames)):
+        if "Volume" in vPrimaryStatNames[i] and "Sum" in vPrimaryStatNames[i]:
+            primary_stats_data["Total_Surface_Volume"] = vPrimaryStatValues[i]
+        if "Sphericity" in vPrimaryStatNames[i]:
+            primary_stats_data["ThioS_Sphericity"] = vPrimaryStatValues[i]
 
-        # Get statistics from primary surface
-        vPrimaryStatistics = vSurfaces.GetStatistics()
-        vPrimaryStatNames = vPrimaryStatistics.GetNames()
-        vPrimaryStatValues = vPrimaryStatistics.GetValues()
-        vPrimaryStatIds = vPrimaryStatistics.GetIds()
+    # Calculate overlap volume between primary and secondary surfaces
+    overlap_volume = 0
+    # Implementation depends on the exact Imaris API
+    # Typically would use the distance transform to identify volumes within a certain distance
 
-        # Get statistics from secondary surface
-        vSecondaryStatistics = vSecondSurfaces.GetStatistics()
-        vSecondaryStatNames = vSecondaryStatistics.GetNames()
-        vSecondaryStatValues = vSecondaryStatistics.GetValues()
-        vSecondaryStatIds = vSecondaryStatistics.GetIds()
+    # Export statistics to CSV
+    print(f"Exporting statistics to {export_path}...")
+    stats_df = pd.DataFrame({
+        'Statistic': ["Total_Surface_Volume", "ThioS_Sphericity", "Overlap_Volume"],
+        'Value': [primary_stats_data.get("Total_Surface_Volume", 0),
+                  primary_stats_data.get("ThioS_Sphericity", 0),
+                  overlap_volume]
+    })
 
-        # Create distance transformation to calculate volume overlap
-        print("Calculating distance statistics and overlaps...")
-        vDistStat = vFactory.DistanceTransformForSurfaces(vSecondSurfaces, vSurfaces)
+    stats_df.to_csv(export_path, index=False)
 
-        # Prepare data for export
-        primary_stats_data = {}
-
-        # Extract total surface volume and sphericity for the primary surface (ThioS)
-        for i in range(len(vPrimaryStatNames)):
-            if "Volume" in vPrimaryStatNames[i] and "Sum" in vPrimaryStatNames[i]:
-                primary_stats_data["Total_Surface_Volume"] = vPrimaryStatValues[i]
-            if "Sphericity" in vPrimaryStatNames[i]:
-                primary_stats_data["ThioS_Sphericity"] = vPrimaryStatValues[i]
-
-        # Calculate overlap volume between primary and secondary surfaces
-        overlap_volume = 0
-        # Implementation depends on the exact Imaris API
-        # Typically would use the distance transform to identify volumes within a certain distance
-
-        # Export statistics to CSV
-        print(f"Exporting statistics to {export_path}...")
-        stats_df = pd.DataFrame({
-            'Statistic': ["Total_Surface_Volume", "ThioS_Sphericity", "Overlap_Volume"],
-            'Value': [primary_stats_data.get("Total_Surface_Volume", 0),
-                      primary_stats_data.get("ThioS_Sphericity", 0),
-                      overlap_volume]
-        })
-
-        stats_df.to_csv(export_path, index=False)
-
-        print('Analysis completed successfully!')
-        return "Success"
+    print('Analysis completed successfully!')
+    return "Success"
