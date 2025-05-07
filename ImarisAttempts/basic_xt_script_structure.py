@@ -62,8 +62,14 @@ def create_surfaces_channels_then_analyze(aImarisId): # command in meta-data mus
     vPrimarySurfaceChannel = vUI.CreateComboBox('Select primary surface channel: ', channel_names, 0)
 
     # Create threshold setting for primary surface
-    vPrimaryThreshold = vUI.CreateNumberRange('Primary threshold: ', 0, 255, 1)
-    vPrimaryThreshold.SetDefaultValue(30)
+    vPrimaryThreshold = vUI.CreateNumberRange('Primary threshold: ', 0, 17386, 1)
+    vPrimaryThreshold.SetDefaultValue(6890)
+# optional filtering step for  after threshold determining step
+    """
+    plaques - volume >70
+    shortest distance to surface, surface would have to be made before hand
+    """
+
 
     # Create dialog for secondary surface
     vSecondarySurfaceChannel = vUI.CreateNumberRange('Secondary surface channel: ', channel_names, 1)
